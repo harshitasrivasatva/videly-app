@@ -1,0 +1,45 @@
+const auth     = require('../middleware/auth');
+const bcrypt   = require('bcrypt');
+const lodash   = require('lodash');
+const mongoose = require('mongoose');
+const express  = require('express');
+const router   = express.Router();
+const { User } = require('../model/users');
+
+router.get('/',async (req,res) => {
+    const users = await User.find();
+    res.send(users);
+})
+
+router.get('/me',auth, async (req,res) => {
+    const user = await User.findById(req.user._id).select('-password');
+    res.send(user);
+})
+
+router.post('/',async (req,res) => {
+    const valid = validate(req.body);
+    if(!valid) return res.send("Name,Password,Email are required");
+
+    let user = await User.findOne({email :req.body.email});
+    if(user) return res.send("User already exits, email in use."); 
+        
+    user = new User(
+        lodash.pick(req.body, ['name','email','password'])
+    );
+    
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(user.password, salt);
+
+    await user.save();
+
+    const token = user.generateAuthToken();
+    res.header('auth-header',token).send(lodash.pick(user,['name','email']));
+})
+
+function validate(user){
+    if(!user.email || !user.password || !user.name)
+      return false;
+    return true;   
+}
+
+module.exports = router;
